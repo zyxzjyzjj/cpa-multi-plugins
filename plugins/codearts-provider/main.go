@@ -83,7 +83,7 @@ import (
 // normalizes provider identifiers.
 const providerID = "codearts-provider"
 
-var version = "0.12.88" // overridden by the unified release build
+var version = "0.12.89" // overridden by the unified release build
 
 var (
 	// currentConfig holds the last configuration delivered by the host. It is

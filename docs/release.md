@@ -16,7 +16,7 @@ https://raw.githubusercontent.com/zyxzjyzjj/cpa-multi-plugins/main/registry.json
 
 ```bash
 CC=gcc bash scripts/build.sh
-python scripts/package-release.py 0.12.88 windows amd64
+python scripts/package-release.py 0.12.89 windows amd64
 python -m unittest discover -s scripts -p 'test_*.py'
 node --test plugins/codearts-provider/tools/panel-regression.test.cjs
 ```
@@ -25,7 +25,7 @@ node --test plugins/codearts-provider/tools/panel-regression.test.cjs
 
 输出位于 `release-assets/`：
 
-- 每个 provider 一个 `<id>_0.12.88_<os>_<arch>.zip`，根目录仅包含 `<id>.dll` / `.so` / `.dylib`。
+- 每个 provider 一个 `<id>_0.12.89_<os>_<arch>.zip`，根目录仅包含 `<id>.dll` / `.so` / `.dylib`。
 - `cpa-multi-plugins-<os>-<arch>.zip`：全部五个 provider，供手动安装。
 - `checksums-<os>-<arch>.txt`：该平台所有包的 SHA-256 校验值；单平台发布时将其复制为 `checksums.txt`，多平台发布时合并各平台清单。
 
@@ -33,14 +33,14 @@ node --test plugins/codearts-provider/tools/panel-regression.test.cjs
 
 1. 提交并推送源码到 main，普通 main 构建会测试和生成 artifacts，不发布 release。
 2. 确认 `VERSION` 与 `registry.json` 各条目的版本一致。
-3. 创建并推送对应 tag（本次为 `v0.12.88`），或手动运行 Build & Release Plugins 工作流并填写版本 tag。
+3. 创建并推送对应 tag（本次为 `v0.12.89`），或手动运行 Build & Release Plugins 工作流并填写版本 tag。
 4. 工作流构建 Linux amd64/arm64、Windows amd64、macOS arm64/amd64，上传每个 provider 的包及合并后的 `checksums.txt`。macOS amd64 保留原工作流的可选交叉构建策略。
 
 商店依据 `repository` 查找 GitHub release，而非直接安装整个项目 zip。因此所有 registry 条目必须指向拥有这些安装包的仓库。Fork 后要同时更新条目的 repository、homepage 和商店源地址。
 
 ## CodeArts 迁移
 
-替换原 CodeArts 动态库后仍使用 `codearts-provider`，配置和账号文件可继续使用。保留原实现 0.1.18 的完整协议和功能；本项目发行版本统一为 0.12.88。避免同时放置原插件和本项目同标识的 CodeArts 动态库。
+替换原 CodeArts 动态库后仍使用 `codearts-provider`，配置和账号文件可继续使用。保留原实现 0.1.18 的完整协议和功能；本项目发行版本统一为 0.12.89。避免同时放置原插件和本项目同标识的 CodeArts 动态库。
 
 ## 本次本地验证
 

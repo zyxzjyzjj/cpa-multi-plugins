@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -39,7 +40,9 @@ func TestBillingBaseFor_Regions(t *testing.T) {
 // set is applied for Intl accounts (the gateway treats header-less calls as
 // browser traffic and bounces them).
 func TestBillingHeaders_IntlRealm(t *testing.T) {
+	var calls atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
 		if got := r.Header.Get("X-IDE-Type"); got != "IDE" {
 			t.Errorf("X-IDE-Type = %q, want IDE", got)
 		}
@@ -53,11 +56,19 @@ func TestBillingHeaders_IntlRealm(t *testing.T) {
 		_, _ = w.Write([]byte(`{"code":0,"msg":"OK","data":{}}`))
 	}))
 	defer srv.Close()
+	// Route the call into this fixture: without this override the test contacts
+	// the real Intl gateway and can pass without checking any headers at all.
+	originalBase := billingBaseIntl
+	billingBaseIntl = srv.URL
+	t.Cleanup(func() { billingBaseIntl = originalBase })
 
 	sa := &storedAuth{}
 	sa.Auth.Domain = "codebuddy.ai"
 	sa.Auth.AccessToken = "intl-test-token"
 	if _, err := billingCallOnce(sa, "/probe", nil); err != nil {
 		t.Fatalf("billingCallOnce: %v", err)
+	}
+	if got := calls.Load(); got != 1 {
+		t.Fatalf("fixture calls = %d, want 1", got)
 	}
 }

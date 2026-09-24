@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)]()
-[![Release](https://img.shields.io/badge/release-v0.12.88-blue)](../../releases)
+[![Release](https://img.shields.io/badge/release-v0.12.89-blue)](../../releases)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)](../../actions)
 
 ## 项目目标
@@ -137,7 +137,7 @@ plugins:
     - "https://raw.githubusercontent.com/zyxzjyzjj/cpa-multi-plugins/main/registry.json"
 ```
 
-源码修改需要先推送到 `main`，再发布 `v0.12.88`，该地址才会提供本次新增的 CodeArts 和可安装的新版本。仅在本地生成文件不会更新 GitHub 上的商店。所有条目的 `repository` 均指向本仓库，不再从 mmqz 的 release 下载旧包。
+源码修改需要先推送到 `main`，再发布 `v0.12.89`，该地址才会提供本次新增的 CodeArts 和可安装的新版本。仅在本地生成文件不会更新 GitHub 上的商店。所有条目的 `repository` 均指向本仓库，不再从 mmqz 的 release 下载旧包。
 
 工作流会为每个 provider、每个平台生成 `<provider>_<version>_<os>_<arch>.zip`（根目录只含一个同名动态库），以及商店要求的 `checksums.txt`。原有 `cpa-multi-plugins-<os>-<arch>.zip` 保留，供手动一次安装全部 provider。完整步骤见 [发布说明](docs/release.md)。
 
