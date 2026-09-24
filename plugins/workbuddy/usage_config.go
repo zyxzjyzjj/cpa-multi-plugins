@@ -72,15 +72,15 @@ var (
 	pinnedModels   = map[string][]string{}
 	pinnedModelsMu sync.RWMutex
 
-	// streamHeadTimeout is the opt-in async-stream "head gate", in integer
-	// seconds. 0 (the default) disables it entirely: the pump hands the stream
+	// streamHeadTimeout is the async-stream "head gate", in integer
+	// seconds. Default 30 seconds; 0 disables it entirely: the pump hands the stream
 	// to the host immediately, exactly as before, including emission timing.
 	// When > 0, handleExecStream waits up to this many seconds for the pump's
 	// first decisive upstream event before opening the host stream, so a
 	// pre-answer failure (upstream >=400 or an error frame before the model
 	// starts answering) can surface as a normal failed request WITH an HTTP
 	// status instead of a lossy in-band text error on an already-200 stream.
-	streamHeadTimeout   = 0
+	streamHeadTimeout   = 30
 	streamHeadTimeoutMu sync.RWMutex
 )
 
@@ -117,7 +117,7 @@ func configure(raw []byte) {
 	nextMgmtKey := ""
 	nextLoginPlatform := "CLI"
 	nextLoginRegion := regionCN
-	nextStreamHeadTimeout := 0 // default off: 0 seconds
+	nextStreamHeadTimeout := 30 // protect pre-answer failures by default
 
 	nextPinned := map[string][]string{}
 	cfgURL, cfgKey := "", ""
@@ -182,10 +182,9 @@ func configure(raw []byte) {
 				if strings.HasPrefix(line, "stream_head_timeout:") {
 					v := strings.TrimSpace(strings.TrimPrefix(line, "stream_head_timeout:"))
 					v = strings.Trim(v, "\"'")
-					// Opt-in only: absent, unparseable or non-positive (incl.
-					// negatives) all normalize to 0 = disabled.
-					if n, err := strconv.Atoi(v); err == nil && n > 0 {
-						nextStreamHeadTimeout = n
+					// Explicit non-positive values retain the legacy opt-out.
+					if n, err := strconv.Atoi(v); err == nil {
+						nextStreamHeadTimeout = max(0, n)
 					}
 				}
 				if strings.HasPrefix(line, "models_cn:") {

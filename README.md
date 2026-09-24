@@ -1,13 +1,13 @@
 # cpa-multi-plugins
 
-> CPA (CLIProxyAPI) 动态库插件集合：CodeBuddy / WorkBuddy / Trae / Qoder 的 CN + Intl 版本，以及 ZCode（智谱 GLM 编码套餐，Z.AI + BigModel）
+> CPA (CLIProxyAPI) 订阅 provider 插件集合：CodeBuddy / WorkBuddy、Trae、Qoder、ZCode 和华为 CodeArts。
 >
-> 主分支 4 个插件（workbuddy / trae / qoder / zcode）覆盖 4 个平台 × 2 个版本（CodeBuddy CN 与 WorkBuddy 已合并）+ 智谱 GLM 编码套餐（Z.AI + BigModel），让 CPA 一个 `/v1/chat/completions` 接口调用所有模型。ZCode 已于 v0.12.84 并入主分支。
+> 主分支 5 个 provider 插件（workbuddy / trae / qoder / zcode / codearts-provider）覆盖腾讯、Trae、Qoder、智谱 GLM 编码套餐（Z.AI + BigModel）及华为 CodeArts，让 CPA 一个 `/v1/chat/completions` 接口调用所有模型。CodeArts 以独立 provider 纳入同一仓库的构建、管理面板和商店发布，保留原插件全部能力。
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go Version](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20windows-lightgrey)]()
-[![Release](https://img.shields.io/badge/release-v0.12.85-blue)](../../releases)
+[![Release](https://img.shields.io/badge/release-v0.12.88-blue)](../../releases)
 [![Build](https://img.shields.io/badge/build-passing-brightgreen)](../../actions)
 
 ## 项目目标
@@ -22,7 +22,7 @@
 | `trae` | Trae 三变体合并（Code CN + SOLO CN + Intl） | llm_utils_chat / Web SOLO | ✅ 每日 | ✅ v2 pack 优先级 | ✅ functional |
 | `qoder` | Qoder 双区合并（CN + Intl） | COSY 签名 | ✅ 每日 | ✅ quota | ✅ functional |
 | `zcode` | 智谱 GLM 编码套餐双 provider 合并（Z.AI + BigModel） | OpenAI 兼容 + anthropic 翻译 + 签名 V4 + off-peak 票务 | —（claim 需验证码侧车） | ✅ billing/balance | ✅ functional |
-
+| `codearts-provider` | 华为 CodeArts Agent / Doer / CodeBot | Agent / Native，OpenAI + Anthropic + Responses | ✅ 手动 / 定时 | ✅ 订阅 + 福利额度 | ✅ integrated |
 
 ## 功能对标
 
@@ -74,9 +74,9 @@
 - 非流式：上游 SSE 聚合 → 单个 `chat.completion` 对象
 - 流式：实时转发 OpenAI SSE chunks（`plan_item` → `delta.content`，`token_usage` → `usage`）
 
-## 为什么是 4 个独立插件而不是合并？
+## 统一项目与独立 provider
 
-CPA 的插件架构基于 `auth.identifier` + `executor.identifier`——**每个 `.so` 只能注册一个 provider name**。CPA 的 `HasAuthProvider(provider)` 按 identifier 精确匹配，所以合并家族后统一使用单一 provider key（`workbuddy` / `qoder` / `trae` / `zcode`），区域内差异（CN/Intl/SOLO 等）通过账号文件内的字段路由，旧插件名的账号文件启动时自动收养。
+CPA 的插件架构基于 `auth.identifier` + `executor.identifier`——**每个 `.so` 只能注册一个 provider name**。CPA 的 `HasAuthProvider(provider)` 按 identifier 精确匹配，所以合并家族后统一使用单一 provider key（`workbuddy` / `qoder` / `trae` / `zcode` / `codearts-provider`），区域内差异（CN/Intl/SOLO 等）通过账号文件内的字段路由，旧插件名的账号文件启动时自动收养。
 
 ### 如果你想减少插件数量
 
@@ -99,7 +99,7 @@ openai-compatibility:
 
 **方案 2：只装你需要的插件**
 
-4 个插件互相独立，不需要全装。每个插件内部支持区域/变体选择（配置或自动收养）：
+5 个 provider 同属本项目，按 CPA ABI 分别生成动态库，互相独立，不需要全装。每个插件内部支持区域/变体选择（配置或自动收养）：
 
 | 你的需求 | 装哪些插件 |
 |---|---|
@@ -111,13 +111,41 @@ openai-compatibility:
 | QoderWork CN | `qoder`（login_region: "cn"，默认） |
 | Qoder Intl | `qoder`（login_region: "intl"，自动收养 qoder-intl 账号文件） |
 | ZCode（智谱 GLM 编码套餐） | `zcode`（login_provider: "zai" 或 "bigmodel"） |
-| 全都要 | 全部 4 个 |
+| 华为 CodeArts | `codearts-provider`（保留原插件的账号及配置标识） |
+| 全都要 | 全部 5 个 |
 
 **方案 3：等 CPA 上游支持多 provider 插件**
 
 如果 CPA 未来支持单插件多 provider（`auth.identifier` 返回数组），可以合并。目前上游无此计划。
 
 ## 安装
+
+### 第三方商店订阅地址
+
+本仓库的第三方商店源（以实际 Git remote `zyxzjyzjj/cpa-multi-plugins` 为准）：
+
+```text
+https://raw.githubusercontent.com/zyxzjyzjj/cpa-multi-plugins/main/registry.json
+```
+
+在 CPA 管理界面的第三方商店源中添加该地址，或配置：
+
+```yaml
+plugins:
+  enabled: true
+  store-sources:
+    - "https://raw.githubusercontent.com/zyxzjyzjj/cpa-multi-plugins/main/registry.json"
+```
+
+源码修改需要先推送到 `main`，再发布 `v0.12.88`，该地址才会提供本次新增的 CodeArts 和可安装的新版本。仅在本地生成文件不会更新 GitHub 上的商店。所有条目的 `repository` 均指向本仓库，不再从 mmqz 的 release 下载旧包。
+
+工作流会为每个 provider、每个平台生成 `<provider>_<version>_<os>_<arch>.zip`（根目录只含一个同名动态库），以及商店要求的 `checksums.txt`。原有 `cpa-multi-plugins-<os>-<arch>.zip` 保留，供手动一次安装全部 provider。完整步骤见 [发布说明](docs/release.md)。
+
+### CodeArts 功能与迁移
+
+CodeArts 原实现整体纳入 `plugins/codearts-provider`：浏览器 OAuth（PKCE / DPoP）、AK/SK 导入、自动刷新、账号级模型发现与别名、Agent/Native 协议、流式及非流式、Anthropic/Responses、工具调用、思考与用量统计、订阅与福利额度、签到与定时领取、账号并发上限和调度均保留。面板跟随 CPA 的浅色、纯白和深色主题。
+
+已有 `codearts-provider` 配置和账号无需改名；安装本项目版本时替换原 CodeArts 动态库，避免同一 provider 加载两份。功能清单和配置见 [CodeArts 说明](plugins/codearts-provider/README.md)。
 
 ### 1. 下载 release
 
@@ -145,7 +173,8 @@ plugins:
     workbuddy: { enabled: true, login_platform: "CLI", login_region: "cn" }  # CLI/ide；region: cn|intl（v0.11.0 起三区合一）
     trae: { enabled: true, login_variant: "cn" }  # cn|solo|intl（v0.12.0 起三合一）
     qoder: { enabled: true, login_region: "cn" }  # cn|intl（v0.10.0 起二合一）
-    zcode: { enabled: true, login_provider: "zai" }  # zai|bigmodel（v0.12.84 起随主分支提供）
+    zcode: { enabled: true, login_provider: "zai" }  # zai|bigmodel
+    codearts-provider: { enabled: true }  # 华为 CodeArts，兼容原插件配置与账号
 ```
 
 ### 4. 重启 CPA，登录账号
@@ -153,6 +182,10 @@ plugins:
 每个插件保持**单一 OAuth 入口**（v0.12.10 起）：OAuth 登录菜单中的 Trae / WorkBuddy / Qoder 条目按插件配置的 `login_variant`（Trae: cn|solo|intl）/ `login_region`（WorkBuddy、Qoder: cn|intl）发起登录。要切换登录指向哪个区域，在管理 UI 的插件配置里改这个下拉并保存即可，下一次点 OAuth 登录就走新区域——入口只有一个，指向由配置决定。
 
 区域登录产生的凭证落盘到 auth-dir 并被对应插件自动收养；已有账号不受登录区域影响（登录变体不劫持现有账号的分发）。
+
+## Issue #12 / #13 核查
+
+详见 [核查与验证记录](docs/issues-12-13.md)。WorkBuddy / Qoder 默认启用 30 秒首包错误检测窗口（`stream_head_timeout: 0` 可恢复旧行为），Qoder 同步错误保留状态；Trae 使用宿主解析后的模型名，4001 参数/模型错误返回请求级 422。超过检测窗口后仍按原方式流式交付，后续错误通过流内通知。
 
 ## 常见问题（FAQ）
 
@@ -171,7 +204,7 @@ plugins:
 
 ```bash
 # 编译所有插件（当前平台）
-make all  # 或 ./scripts/build.sh
+bash scripts/build.sh
 
 # 跨平台编译
 ./scripts/build.sh linux amd64
@@ -202,7 +235,7 @@ cd plugins/trae && CGO_ENABLED=1 go build -buildmode=c-shared -o trae.so .
 | **[Ttungx/trae-solo-local-api](https://github.com/Ttungx/trae-solo-local-api)** | TypeScript | Trae 上游无原生 thinking 参数 / agent 字段 4023 实测（Body 白名单依据）<br>image_url 多模态透传实测 | trae |
 | **[TriDefender/zcode-api](https://github.com/TriDefender/zcode-api)** | TypeScript | ZCode 智谱 GLM 编码套餐反代——OAuth 中转登录 / 签名 V4 / 身份头（g6n/TV）/ 账务平面 / 模型目录 | zcode |
 | **[zai-org/ZCode](https://github.com/zai-org/ZCode)** | TypeScript | ZCode 官方开源客户端（仅取账户级线路协议形状）：start-plan anthropic 翻译层 + 官方 system 块 + 业务错误码全表（M2）<br>off-peak 错峰票务五端点 wire 契约 + 排队/废票决策（M3） | zcode |
-| **[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** | Go | CPA 插件 SDK（examples/plugin/{executor,auth}/go/）<br>pluginapi / pluginabi 类型定义 | 全部 4 个插件 |
+| **[router-for-me/CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** | Go | CPA 插件 SDK（examples/plugin/{executor,auth}/go/）<br>pluginapi / pluginabi 类型定义 | 全部 5 个插件 |
 
 ### 各插件的具体借鉴文件
 

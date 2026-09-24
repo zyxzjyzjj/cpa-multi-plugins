@@ -40,7 +40,7 @@ func TestSoloFaultStatusMapsInStreamCodes(t *testing.T) {
 		{"plan limit 1005", &upstream.SOLOStreamError{Code: 1005, Msg: "plan limit"}, 402},
 		{"plan limit 4008", &upstream.SOLOStreamError{Code: 4008, Msg: "Your requests have exceeded the quota"}, 402},
 		{"input too large", &upstream.SOLOStreamError{Code: 4001, Msg: "prompt is too long for the model"}, 413},
-		{"model lane mismatch", &upstream.SOLOStreamError{Code: 4001, Msg: "We're sorry, the param is invalid."}, 404},
+		{"model lane mismatch", &upstream.SOLOStreamError{Code: 4001, Msg: "We're sorry, the param is invalid."}, 422},
 		{"unknown", &upstream.SOLOStreamError{Code: 4023, Msg: "something went wrong"}, 502},
 	}
 	for _, tc := range cases {

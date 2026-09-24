@@ -231,7 +231,7 @@ func pumpUpstreamStream(httpReq *http.Request, cancel context.CancelFunc, stream
 		// The transport-level failure carries no upstream status; surface it to
 		// the hand-off as a plain pre-answer failure (status 0) so a stalled
 		// stream that errors before answering never opens the host stream.
-		if !gate.fail(fmt.Errorf("http_error: %v", err)) {
+		if !gate.fail(&statusError{status: http.StatusBadGateway, err: fmt.Errorf("http_error: %w", err)}) {
 			return
 		}
 		streamEmitError(streamID, fmt.Sprintf("http_error: %v", err))
@@ -250,7 +250,7 @@ func pumpUpstreamStream(httpReq *http.Request, cancel context.CancelFunc, stream
 		// An upstream >=400 already has a real status: hand it to the hand-off
 		// synchronously as a status-bearing failed envelope (the existing
 		// upstreamStatusError policy) instead of the lossy in-band text error.
-		if !gate.fail(upstreamStatusError(statusCode, string(errPayload), fullErr)) {
+		if !gate.fail(streamHeadError(statusCode, string(errPayload), fullErr)) {
 			return
 		}
 		streamEmitError(streamID, fullErr.Error())
@@ -782,8 +782,10 @@ func streamChunkAnswers(chunk []byte) bool {
 	var frame struct {
 		Choices []struct {
 			Delta struct {
-				Content          string `json:"content"`
-				ReasoningContent string `json:"reasoning_content"`
+				Content          string            `json:"content"`
+				ReasoningContent string            `json:"reasoning_content"`
+				ToolCalls        []json.RawMessage `json:"tool_calls"`
+				FunctionCall     map[string]any    `json:"function_call"`
 			} `json:"delta"`
 		} `json:"choices"`
 	}
@@ -791,7 +793,7 @@ func streamChunkAnswers(chunk []byte) bool {
 		return false
 	}
 	for _, choice := range frame.Choices {
-		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" {
+		if choice.Delta.Content != "" || choice.Delta.ReasoningContent != "" || len(choice.Delta.ToolCalls) > 0 || len(choice.Delta.FunctionCall) > 0 {
 			return true
 		}
 	}

@@ -350,13 +350,8 @@ func TestHeadGateStatusTable(t *testing.T) {
 	}
 }
 
-// TestFrameErrorStaysStatusLessOutsideGate pins the scope of the change: the
-// non-stream aggregator and the synchronous collector hand the very same frame
-// error straight to the host, and there it must keep reporting no HTTP status
-// at all (v0.12.84 behavior). Promoting it into an http_status would start
-// cooling credentials on frames that never cooled them before, outside the
-// opt-in gate.
-func TestFrameErrorStaysStatusLessOutsideGate(t *testing.T) {
+// The synchronous aggregator must report the same status as the async gate.
+func TestFrameErrorKeepsStatusOutsideGate(t *testing.T) {
 	stream := qoderOpener(t) + qoderFault(t, http.StatusTooManyRequests, "quota exhausted") + qoderDone()
 	_, errAggregate := aggregateQoderSSE(strings.NewReader(stream), "glm-4.6")
 	if errAggregate == nil {
@@ -367,21 +362,21 @@ func TestFrameErrorStaysStatusLessOutsideGate(t *testing.T) {
 	if err := json.Unmarshal(raw, &env); err != nil || env.OK || env.Error == nil {
 		t.Fatalf("failure envelope malformed: %s err=%v", raw, err)
 	}
-	if env.Error.HTTPStatus != 0 {
-		t.Fatalf("non-gated paths must not start reporting a status: %d (%q)", env.Error.HTTPStatus, env.Error.Message)
+	if env.Error.HTTPStatus != http.StatusTooManyRequests {
+		t.Fatalf("synchronous path lost status: %d (%q)", env.Error.HTTPStatus, env.Error.Message)
 	}
 	// Same failure, read by the gate, does yield the frame's real number.
 	if got := headGateStatus(frameGateStatus(errAggregate)); got != http.StatusTooManyRequests {
 		t.Fatalf("headGateStatus(frameGateStatus(err)) = %d, want 429", got)
 	}
 	// collectUpstreamStreamQoder surfaces the same error type on its frame path;
-	// the wrapper the head gate returns is the only place a status is attached.
+	// both paths must retain the frame status.
 	var frameErr *qoderFrameError
 	if !errors.As(errAggregate, &frameErr) {
 		t.Fatalf("aggregator error must stay a *qoderFrameError, got %T", errAggregate)
 	}
-	if _, ok := any(errAggregate).(interface{ StatusCode() int }); ok {
-		t.Fatal("a frame error must not implement StatusCode() — see the qoderFrameError doc")
+	if sc, ok := any(errAggregate).(interface{ StatusCode() int }); !ok || sc.StatusCode() != 429 {
+		t.Fatal("a frame error must retain its upstream status")
 	}
 }
 
@@ -566,12 +561,11 @@ func TestHeadGateDisabledKeepsHistoricalBehaviour(t *testing.T) {
 // --- 6. config plumbing ------------------------------------------------------
 
 func TestStreamHeadTimeoutConfig(t *testing.T) {
-	t.Cleanup(func() { setStreamHeadTimeout(0) })
+	t.Cleanup(func() { setStreamHeadTimeout(30) })
 
-	if got := streamHeadTimeout(); got != 0 {
-		// The default must be opt-in: nobody gets a new hand-off delay just by
-		// upgrading the plugin.
-		t.Fatalf("default streamHeadTimeout = %s, want 0 (disabled)", got)
+	configure(nil)
+	if got := streamHeadTimeout(); got != 30*time.Second {
+		t.Fatalf("default streamHeadTimeout = %s, want 30s", got)
 	}
 	setStreamHeadTimeout(-1)
 	if got := streamHeadTimeout(); got != 0 {
@@ -593,10 +587,10 @@ func TestStreamHeadTimeoutConfig(t *testing.T) {
 		want time.Duration
 	}{
 		{"stream_head_timeout: 2", 2 * time.Second},
-		{"stream_head_timeout: 5s", 0},
+		{"stream_head_timeout: 5s", 30 * time.Second},
 		{"stream_head_timeout: -7", 0},
 		{`stream_head_timeout: "4"`, 4 * time.Second},
-		{"checkin_auto: true", 0},
+		{"checkin_auto: true", 30 * time.Second},
 	}
 	for _, tc := range cases {
 		request, err := json.Marshal(map[string]any{"config_yaml": []byte(tc.yaml)})

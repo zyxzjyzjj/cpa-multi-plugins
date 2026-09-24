@@ -104,12 +104,7 @@ func streamHeaders() http.Header {
 // statusCodeValue, so the head gate can hand the *real* status to the host
 // instead of inventing one (see streamHeadGate).
 //
-// It deliberately does NOT implement StatusCode(). The synchronous collector
-// and the non-stream aggregator return this error straight to the host, where
-// errorEnvelopeFor would promote it into an http_status and start cooling
-// credentials on frames that never cooled them before — a behavior change
-// outside the opt-in gate. Only frameGateStatus reads the number, and only the
-// head gate acts on it.
+// StatusCode preserves the same status in synchronous and asynchronous paths.
 type qoderFrameError struct {
 	msg string
 	// status is the frame's statusCodeValue: 0 when the frame carried none
@@ -119,6 +114,9 @@ type qoderFrameError struct {
 }
 
 func (e *qoderFrameError) Error() string { return e.msg }
+
+// Synchronous collection must preserve the same failure status as the async gate.
+func (e *qoderFrameError) StatusCode() int { return headGateStatus(e.status) }
 
 // streamHeadGate is the one-shot handshake between the async pump (which reads
 // the first upstream frames) and the executor hand-off (which decides what the
@@ -310,7 +308,7 @@ func streamChunkAnswers(chunk string) bool {
 // v0.12.85 gate: when handleExecStream enabled the head gate it passes a
 // non-nil gate and blocks in awaitHandoff until the pump reports. Until then
 // this function reads without emitting (see release below). gate == nil — the
-// default, stream_head_timeout 0 — keeps the historical behavior byte for byte.
+// explicit stream_head_timeout 0 — keeps the historical behavior byte for byte.
 func pumpUpstreamStream(httpReq *http.Request, cancel context.CancelFunc, streamID string, sseFramed bool, requestedModel, upstreamModel, authUID string, started time.Time, authID, cooldownModel string, gate *streamHeadGate) {
 	// Always close the host stream exactly once on every exit path.
 	closed := false
@@ -329,11 +327,9 @@ func pumpUpstreamStream(httpReq *http.Request, cancel context.CancelFunc, stream
 	stream, statusCode, _, err := hostHTTPDoStream(httpReq)
 	if err != nil {
 		publishUsage(requestedModel, upstreamModel, authUID, started, usage.Detail{}, true, 0, err.Error())
-		// Deliberately not gated: no status came back and a client-side context
-		// cancellation reads exactly like an upstream outage, so the hand-off
-		// must not cool a credential on it. Release keeps the waiting
-		// hand-off from burning the whole window on a dead stream.
-		gate.release()
+		if gate.abort(http.StatusBadGateway, fmt.Errorf("http_error: %w", err)) {
+			return
+		}
 		streamErrorSink(streamID, fmt.Sprintf("http_error: %v", err))
 		return
 	}

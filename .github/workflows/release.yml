@@ -15,7 +15,7 @@ on:
       version:
         description: 'Version tag (e.g. v0.1.0)'
         required: true
-        default: 'v0.1.0-dev'
+        default: 'v0.12.88'
 
 permissions:
   contents: write
@@ -102,16 +102,19 @@ jobs:
           CGO_ENABLED: 1
           CC: gcc
         run: |
+          set -euo pipefail
           which gcc 2>&1 || echo "which gcc failed"
           gcc --version 2>&1 | head -1 || echo "gcc invocation failed"
+          VERSION=$(tr -d '\r\n' < VERSION)
           mkdir -p dist/${{ matrix.os }}-${{ matrix.arch }}
-          PLUGINS="workbuddy qoder trae zcode"
+          PLUGINS=$(python -c 'import json; print(" ".join(p["id"] for p in json.load(open("registry.json", encoding="utf-8"))["plugins"]))')
           for plugin in $PLUGINS; do
             echo "=== Building $plugin ==="
             cd plugins/$plugin
             go mod download
+            if [ "$GOOS-$GOARCH" != "darwin-amd64" ]; then go test ./...; fi
             OUTPUT="../../dist/${{ matrix.os }}-${{ matrix.arch }}/${plugin}.${{ matrix.ext }}"
-            go build -buildmode=c-shared -trimpath -ldflags="-s -w" -o "$OUTPUT" .
+            go build -buildmode=c-shared -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$OUTPUT" .
             if [ $? -eq 0 ]; then
               echo "  ✅ $plugin built"
             else
@@ -130,14 +133,17 @@ jobs:
           CGO_ENABLED: 1
           CC: ${{ matrix.cc }}
         run: |
+          set -euo pipefail
+          VERSION=$(tr -d '\r\n' < VERSION)
           mkdir -p dist/${{ matrix.os }}-${{ matrix.arch }}
-          PLUGINS="workbuddy qoder trae zcode"
+          PLUGINS=$(python -c 'import json; print(" ".join(p["id"] for p in json.load(open("registry.json", encoding="utf-8"))["plugins"]))')
           for plugin in $PLUGINS; do
             echo "=== Building $plugin ==="
             cd plugins/$plugin
             go mod download
+            if [ "$GOOS-$GOARCH" != "darwin-amd64" ]; then go test ./...; fi
             OUTPUT="../../dist/${{ matrix.os }}-${{ matrix.arch }}/${plugin}.${{ matrix.ext }}"
-            go build -buildmode=c-shared -trimpath -ldflags="-s -w" -o "$OUTPUT" .
+            go build -buildmode=c-shared -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$OUTPUT" .
             if [ $? -eq 0 ]; then
               echo "  ✅ $plugin built"
             else
@@ -148,30 +154,23 @@ jobs:
           done
         shell: bash
 
-      - name: Package artifacts (Windows)
-        if: matrix.os == 'windows'
-        shell: powershell
+      - name: Package store and manual artifacts
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version }}
         run: |
-          Get-ChildItem dist/${{ matrix.os }}-${{ matrix.arch }} -Filter *.dll | ForEach-Object { Write-Host "  $($_.Name)" }
-          Compress-Archive -Path "dist/${{ matrix.os }}-${{ matrix.arch }}/*.dll" -DestinationPath "cpa-multi-plugins-${{ matrix.os }}-${{ matrix.arch }}.zip" -Force
-          Write-Host "Created zip:"
-          Get-Item "cpa-multi-plugins-${{ matrix.os }}-${{ matrix.arch }}.zip" | Select-Object Name, Length
-
-      - name: Package artifacts (non-Windows)
-        if: matrix.os != 'windows'
-        run: |
-          cd dist/${{ matrix.os }}-${{ matrix.arch }}
-          rm -f *.h
-          zip -r ../../cpa-multi-plugins-${{ matrix.os }}-${{ matrix.arch }}.zip .
-          cd ../..
-          ls -lh cpa-multi-plugins-*.zip
+          VERSION="${RELEASE_TAG#v}"
+          if [ -z "$VERSION" ]; then VERSION=$(tr -d '\r\n' < VERSION); fi
+          test "$VERSION" = "$(tr -d '\r\n' < VERSION)" || { echo "Tag must match VERSION and registry.json"; exit 1; }
+          python -m unittest discover -s scripts -p 'test_*.py'
+          node --test plugins/codearts-provider/tools/panel-regression.test.cjs
+          python scripts/package-release.py "$VERSION" ${{ matrix.os }} ${{ matrix.arch }}
         shell: bash
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: cpa-multi-plugins-${{ matrix.os }}-${{ matrix.arch }}
-          path: cpa-multi-plugins-${{ matrix.os }}-${{ matrix.arch }}.zip
+          path: release-assets/*
           retention-days: 30
 
   release:
@@ -200,16 +199,15 @@ jobs:
         run: |
           mkdir -p release
           find artifacts -name "*.zip" -exec cp {} release/ \;
+          find artifacts -name "checksums-*.txt" -exec cat {} \; > release/checksums.txt
           ls -lh release/
 
       - name: Determine version
         id: version
+        env:
+          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || github.event.inputs.version }}
         run: |
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            echo "version=${{ github.ref_name }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-          fi
+          echo "version=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
         shell: bash
 
       - name: Create GitHub Release
@@ -220,7 +218,10 @@ jobs:
           body: |
             # cpa-multi-plugins ${{ steps.version.outputs.version }}
 
-            3 unified CPA plugins: **CodeBuddy/WorkBuddy**, **Qoder**, **Trae** — each merges the former CN/Intl/solo variants with automatic legacy auth-file adoption.
+            5 CPA providers: **CodeBuddy/WorkBuddy**, **Qoder**, **Trae**, **ZCode**, **CodeArts** — each merges the former CN/Intl/solo variants with automatic legacy auth-file adoption.
+
+            Third-party store: https://raw.githubusercontent.com/${{ github.repository }}/main/registry.json
+            Store assets use `<provider>_<version>_<os>_<arch>.zip`; `checksums.txt` contains SHA-256 checksums.
 
             ## Downloads
             - `cpa-multi-plugins-linux-amd64.zip` — Linux x86_64
@@ -241,8 +242,10 @@ jobs:
                    workbuddy: { enabled: true }
                    qoder: { enabled: true }
                    trae: { enabled: true }
+                   zcode: { enabled: true }
+                   codearts-provider: { enabled: true }
                ```
-            4. Restart CPA and check logs for `pluginhost: plugin registered plugin_id=workbuddy/qoder/trae`.
+            4. Restart CPA and check logs for `pluginhost: plugin registered plugin_id=workbuddy/qoder/trae/zcode/codearts-provider`.
             5. Login accounts via the management panel or Management API. Legacy `codebuddy-cn-/codebuddy-intl-/qoder-cn-/qoder-intl-/trae-cn-/trae-solo-cn-/trae-intl-` auth files are adopted automatically.
 
             ## Plugins
@@ -251,8 +254,12 @@ jobs:
             | workbuddy | CodeBuddy + WorkBuddy + codebuddy-cn + codebuddy-intl | CN (copilot.tencent.com) / Global (workbuddy.ai) / Intl (codebuddy.ai) | CLI + IDE, per-account region |
             | qoder | Qoder + qoder-cn + qoder-intl | CN (qoder.com.cn) / Intl (qoder.com) | Device flow + PAT, per-account region |
             | trae | Trae CN + Trae SOLO CN + Trae Intl | CN (api.trae.cn) / SOLO / Intl (marscode) | Per-variant device flow |
+            | zcode | GLM coding plan | Z.AI / BigModel | Browser login |
+            | codearts-provider | Huawei CodeArts Agent / Doer | Huawei Cloud | OAuth PKCE / DPoP, AK/SK import |
 
-            See [README](https://github.com/mmqz/cpa-multi-plugins#readme) for details.
-          files: release/*.zip
+            See [README](https://github.com/${{ github.repository }}#readme) for details.
+          files: |
+            release/*.zip
+            release/checksums.txt
           draft: false
           prerelease: false

@@ -127,7 +127,7 @@ plugins:
       # guard. Also readable from WB_MANAGEMENT_KEY env var.
       management_key: ""
 
-      # Opt-in async-stream head gate, in seconds (default 0 = off, which keeps
+      # Async-stream head gate, in seconds (default 30; setting 0 keeps
       # today's behavior byte-for-byte). When > 0 the executor waits up to this
       # long for the first upstream event before opening the host stream, so a
       # pre-answer failure (upstream >=400, or an error frame that arrives before
@@ -135,7 +135,7 @@ plugins:
       # HTTP status instead of a lossy in-band text error the host reads as an
       # "empty success". It never waits longer than this and never fails a stream
       # that is merely slow to open (a silent window releases normally).
-      stream_head_timeout: 0
+      stream_head_timeout: 30
 ```
 
 Model aliases and exclusions are handled natively by CPA's

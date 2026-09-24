@@ -187,25 +187,35 @@ func containsAny(s string, subs ...string) bool {
 // instead of degrading into a lossy in-band text error the host reads as a
 // "successful empty answer".
 //
-// The status is not invented: streamFaultStatus derives the status the gateway
-// *would* have used, then upstreamStatusError applies the exact account-vs-
-// request policy (401/402/429/business-403 ride the envelope; request/IP-level
-// shapes and the model-scoped 6004 stay status 0). payload must be the raw
-// frame body (stripDataPrefix'd), NOT the redacted/truncated error string, so
-// the classifiers see the real business envelope.
+// Raw frame bodies retain business codes for request/account classification.
+// Unknown pre-answer failures use 502; 6004 stays in the local model limiter.
 func streamFaultError(frameErr error, payload string, sa *storedAuth) error {
 	status := streamFaultStatus(payload)
 	if status == 0 {
-		// Unrecognised / request-level / model-scoped 6004: keep the frame
-		// error plain (status 0), matching the transient-cooldown behavior an
-		// unknown stream error had before the gate existed.
-		return frameErr
+		return streamHeadError(status, payload, frameErr)
 	}
 	// Reuse the exact synchronous error surface (actionable 11102/11115/… copy
 	// + Retry-After is absent here since a 200 stream carries none) so a
 	// pre-answer frame and a real >=400 produce the same user-facing message,
 	// then let upstreamStatusError apply the account-vs-request policy.
-	return upstreamStatusError(status, payload, translateChatUpstreamErrorFull(status, payload, sa, nil))
+	return streamHeadError(status, payload, translateChatUpstreamErrorFull(status, payload, sa, nil))
+}
+
+// Before any answer is delivered, preserve a status for host failover.
+// 6004 remains in the existing per-model limiter; it is not account exhaustion.
+func streamHeadError(status int, payload string, err error) error {
+	if isModelScopedRateLimit(http.StatusTooManyRequests, payload) {
+		return err
+	}
+	switch {
+	case status == http.StatusRequestEntityTooLarge || isPromptTooLong(http.StatusBadRequest, payload):
+		status = http.StatusRequestEntityTooLarge
+	case isModelNotRegistered(http.StatusBadRequest, payload):
+		status = http.StatusUnprocessableEntity
+	case status < 400 || status > 599:
+		status = http.StatusBadGateway
+	}
+	return &statusError{status: status, err: err}
 }
 
 // streamFaultStatus maps an in-stream error frame's body to the HTTP status the

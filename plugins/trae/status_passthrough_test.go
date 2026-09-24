@@ -32,8 +32,8 @@ func TestErrorEnvelopeForPlainErrorOmitsStatus(t *testing.T) {
 	}
 }
 
-// TestUpstreamStatusErrorPolicy locks the 0.12.52 matrix: only 401/402/429
-// pass their status to the host cooldown layer. 404 must stay status-less —
+// TestUpstreamStatusErrorPolicy preserves request and server failures alongside
+// account failures. A plain HTTP 404 stays status-less —
 // the host maps 404 to 12h while the plugin pool intends CoolSoft 60s.
 func TestUpstreamStatusErrorPolicy(t *testing.T) {
 	cases := []struct {
@@ -46,9 +46,10 @@ func TestUpstreamStatusErrorPolicy(t *testing.T) {
 		{"429 rate limit", 429, 429},
 		{"404 not found", 404, 0},
 		{"403 plan limit body", 403, 0},
-		{"413 input too large", 413, 0},
-		{"400 client", 400, 0},
-		{"500 server", 500, 0},
+		{"413 input too large", 413, 413},
+		{"400 client", 400, 400},
+		{"422 model mismatch", 422, 422},
+		{"500 server", 500, 500},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

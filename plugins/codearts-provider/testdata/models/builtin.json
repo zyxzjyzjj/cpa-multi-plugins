@@ -1,0 +1,46 @@
+{
+  "builtinModels": [
+    {
+      "model_id": "GLM-5.2",
+      "model_name": "GLM-5.2",
+      "enable": true,
+      "supports_images": false,
+      "context_window": 202752,
+      "max_tokens": 131072,
+      "model_desc": "fixture: also served by the agent catalog"
+    },
+    {
+      "model_id": "glm-5.2-sft-harmony",
+      "model_name": "GLM-5.2-ArkTS-SPARK",
+      "enable": true,
+      "supports_images": false,
+      "context_window": 202752,
+      "max_tokens": 131072,
+      "model_desc": "fixture: also served by the agent catalog, which must keep its own route"
+    },
+    {
+      "model_id": "Qwen3-VL-235B",
+      "model_name": "Qwen3-VL-235B",
+      "enable": true,
+      "supports_images": true,
+      "context_window": 131072,
+      "max_tokens": 8192,
+      "model_desc": "fixture: built-in only, no agent or benefit entry"
+    },
+    {
+      "model_id": "kimi-k2.6-vl",
+      "model_name": "Kimi-K2.6-VL",
+      "enable": true,
+      "supports_images": true,
+      "context_window": 262144,
+      "max_tokens": 32768
+    },
+    {
+      "model_id": "not-enabled",
+      "model_name": "Not Enabled",
+      "enable": false,
+      "context_window": 8192,
+      "max_tokens": 1024
+    }
+  ]
+}

@@ -361,9 +361,10 @@ func wbRegistration() registration {
 			Name:             providerName,
 			Version:          version,
 			Author:           "Sliverkiss (based on qoderwork by lovingfish)",
-			GitHubRepository: "https://github.com/Sliverkiss/cpa-plugin",
+			GitHubRepository: "https://github.com/zyxzjyzjj/cpa-multi-plugins",
 			Logo:             pluginLogoURL,
 			ConfigFields: []pluginapi.ConfigField{
+				{Name: "stream_head_timeout", Type: pluginapi.ConfigFieldTypeInteger, Description: "Pre-answer error detection window in seconds (default 30; 0 disables). Within this window, failures retain their HTTP status for host failover. After the window, streaming continues with in-band errors."},
 				{Name: "checkin_auto", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Enable daily auto check-in at 09:00 and 21:00 local time for CN accounts (default true)."},
 				{Name: "login_region", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{regionCN, regionIntl}, Description: "Region for NEW logins: cn (qoder.com.cn, default) or intl (qoder.com). Existing accounts keep their own region; legacy qoder-cn-/qoder-intl- auth files are adopted automatically."},
 				{Name: "lifecycle_auto", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Auto disable CN when credits exhausted; re-enable CN after check-in restores credits (default true)."},
@@ -878,21 +879,17 @@ func handleExecStream(raw []byte) ([]byte, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpointChatFor(sa), strings.NewReader(encodedBody))
 	if err != nil {
 		cancel()
-		streamEmitError(req.StreamID, err.Error())
-		streamClose(req.StreamID)
-		return okEnvelope(streamResponse{Headers: headers})
+		return nil, &statusError{status: http.StatusBadGateway, err: err}
 	}
 	if err := applyCosyHeaders(httpReq, sa, encodedBody, endpointChatFor(sa), upstreamModel, true); err != nil {
 		cancel()
-		streamEmitError(req.StreamID, "cosy: "+err.Error())
-		streamClose(req.StreamID)
-		return okEnvelope(streamResponse{Headers: headers})
+		return nil, &statusError{status: http.StatusBadGateway, err: fmt.Errorf("cosy: %w", err)}
 	}
-	// v0.12.85 opt-in stream head gate (config `stream_head_timeout`, seconds).
+	// v0.12.85 stream head gate (config `stream_head_timeout`, seconds).
 	// The pump reads the opening frames while the hand-off waits for its
 	// verdict, so a failure that lands before the model starts answering still
 	// travels back as an ordinary failed request carrying the upstream's own
-	// status. Without the gate (the default) this is the historical blind
+	// status. With the gate explicitly disabled this is the historical blind
 	// hand-off: the pump owns the verdict channel and never blocks on us.
 	headTimeout := streamHeadTimeout()
 	gate := newStreamHeadGate(headTimeout)

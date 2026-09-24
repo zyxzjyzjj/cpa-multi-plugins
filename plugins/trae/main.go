@@ -479,7 +479,7 @@ func buildRegistration() registrationPayload {
 			Name:             providerName,
 			Version:          version,
 			Author:           "mmqz (based on traework2api by Sliverkiss)",
-			GitHubRepository: "https://github.com/mmqz/cpa-multi-plugins",
+			GitHubRepository: "https://github.com/zyxzjyzjj/cpa-multi-plugins",
 			Logo:             pluginLogoURL,
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "checkin_auto", Type: pluginapi.ConfigFieldTypeBoolean, Description: "Enable daily auto check-in at 09:00 local time (default true)."},
@@ -1892,6 +1892,9 @@ func handleExecExecute(request []byte) ([]byte, error) {
 	if err := json.Unmarshal(request, &req); err != nil {
 		return nil, err
 	}
+	if err := normalizeExecutorPayload(&req); err != nil {
+		return nil, err
+	}
 	a, err := parseStoredAuth(req.StorageJSON)
 	if err != nil {
 		return nil, fmt.Errorf("execute: parse auth: %w", err)
@@ -2019,7 +2022,7 @@ func (t *soloFaultTracker) any() bool {
 // "成功但没内容"，既不会换号也不会冷却。
 //   - 1005/4008 账号配额耗尽 → 402，宿主换凭据并冷却该号；
 //   - 输入过大 → 413，请求级问题，不换号也不冷却；
-//   - 4001 模型不在当前通道 → 404，换下一家但不长冷却；
+//   - 4001 模型不在当前通道 → 422，请求级失败，不惩罚账号；
 //   - 其余 → 502。
 func soloFaultStatus(se *upstream.SOLOStreamError) int {
 	switch se.Kind() {
@@ -2028,7 +2031,7 @@ func soloFaultStatus(se *upstream.SOLOStreamError) int {
 	case upstream.ErrInputTooLarge:
 		return http.StatusRequestEntityTooLarge
 	case upstream.ErrModelUnavailable:
-		return http.StatusNotFound
+		return http.StatusUnprocessableEntity
 	default:
 		return http.StatusBadGateway
 	}
@@ -2094,6 +2097,9 @@ func soloStreamHead(ch <-chan []byte, faults *soloFaultTracker) ([][]byte, *upst
 func handleExecStream(request []byte) ([]byte, error) {
 	var req executorStreamRequest
 	if err := json.Unmarshal(request, &req); err != nil {
+		return nil, err
+	}
+	if err := normalizeExecutorPayload(&req.ExecutorRequest); err != nil {
 		return nil, err
 	}
 	a, err := parseStoredAuth(req.StorageJSON)
@@ -2339,14 +2345,16 @@ func (e *statusError) StatusCode() int { return e.status }
 func (e *statusError) Unwrap() error   { return e.err }
 
 // upstreamStatusError wraps a chat failure for the host cooldown layer.
-// trae policy: only 401/402/429 pass. 404 stays status-less — the host maps
-// 404 to 12h while the plugin pool intends CoolSoft 60s; plan-limit bodies
-// and input-too-large are already handled plugin-side (ErrPlanLimit 12h /
-// ErrInputTooLarge no-op) and must not be double-cooled by host policy.
+// Preserve request-level and server statuses as well as account failures.
+// 404 remains local (the host maps it to 12h); model mismatch uses 422 instead.
 func upstreamStatusError(status int, err error) error {
 	if status == http.StatusUnauthorized ||
 		status == http.StatusPaymentRequired ||
-		status == http.StatusTooManyRequests {
+		status == http.StatusTooManyRequests ||
+		status == http.StatusBadRequest ||
+		status == http.StatusRequestEntityTooLarge ||
+		status == http.StatusUnprocessableEntity ||
+		(status >= 500 && status <= 599) {
 		return &statusError{status: status, err: err}
 	}
 	return err

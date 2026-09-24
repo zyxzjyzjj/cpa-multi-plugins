@@ -1,0 +1,54 @@
+{
+  "gpts": {
+    "models": [
+      {
+        "model_alias": "GLM-5.2",
+        "model_name": "GLM-5.2",
+        "model_parameters": {
+          "model_id": "GLM-5.2",
+          "enabled": null,
+          "display_enabled": true,
+          "context_window": 202752,
+          "max_tokens": 131072,
+          "supports_images": false
+        }
+      },
+      {
+        "model_alias": "glm-5.2-sft-harmony",
+        "model_name": "GLM-5.2-ArkTS-SPARK",
+        "model_parameters": {
+          "model_id": "glm-5.2-sft-harmony",
+          "enabled": null,
+          "display_enabled": true,
+          "context_window": 202752,
+          "max_tokens": 131072,
+          "supports_images": false
+        }
+      },
+      {
+        "model_alias": "openpangu-2.0-pro",
+        "model_name": "OpenPangu-2.0-Pro",
+        "model_parameters": {
+          "model_id": "openpangu-2.0-pro",
+          "enabled": null,
+          "display_enabled": true,
+          "context_window": 524288,
+          "max_tokens": 131072,
+          "supports_images": false
+        }
+      },
+      {
+        "model_alias": "openpangu-2.0-flash",
+        "model_name": "OpenPangu-2.0-Flash",
+        "model_parameters": {
+          "model_id": "openpangu-2.0-flash",
+          "enabled": null,
+          "display_enabled": true,
+          "context_window": 524288,
+          "max_tokens": 131072,
+          "supports_images": false
+        }
+      }
+    ]
+  }
+}

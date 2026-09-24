@@ -128,9 +128,9 @@ func TestStreamHeadFaultStatusMapping(t *testing.T) {
 		{"throttle (non-6004) -> 429", `{"code":11120,"msg":"too many requests, slow down"}`, 429},
 		{"business 403 -> 403", `{"code":11140,"msg":"no permission to access"}`, 403},
 		{"model-scoped 6004 stays status-less", head6004Frame, 0},
-		{"prompt-too-long is request-level", `{"code":11115,"msg":"prompt is too long"}`, 0},
-		{"bare event:error has nothing to map", "event:error", 0},
-		{"opaque body stays status-less", `{"detail":"something odd"}`, 0},
+		{"prompt-too-long is request-level", `{"code":11115,"msg":"prompt is too long"}`, 413},
+		{"bare event:error is upstream failure", "event:error", 502},
+		{"opaque body is upstream failure", `{"detail":"something odd"}`, 502},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -155,6 +155,9 @@ func TestStreamChunkAnswersOnlyContentCounts(t *testing.T) {
 	}
 	if !streamChunkAnswers([]byte(stripDataPrefix(headReasoning))) {
 		t.Fatal("a reasoning_content delta must count as answered")
+	}
+	if !streamChunkAnswers([]byte(`{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{"}}]}}]}`)) {
+		t.Fatal("a tool call delta must count as answered")
 	}
 	if streamChunkAnswers([]byte(`{"choices":[{"delta":{"content":""}}]}`)) {
 		t.Fatal("an empty content delta must not count as answered")
@@ -331,8 +334,9 @@ func TestStreamHeadDisabledKeepsOldBehavior(t *testing.T) {
 func TestStreamHeadTimeoutConfigNormalization(t *testing.T) {
 	defer configure(configYAMLEnvelope("enabled: true")) // restore default for other tests
 
-	if got := loadedStreamHeadTimeout(); got != 0 {
-		t.Fatalf("default must be 0 (disabled), got %d", got)
+	configure(configYAMLEnvelope("enabled: true"))
+	if got := loadedStreamHeadTimeout(); got != 30 {
+		t.Fatalf("default must be 30 seconds, got %d", got)
 	}
 	for _, tc := range []struct {
 		yaml string
@@ -342,7 +346,7 @@ func TestStreamHeadTimeoutConfigNormalization(t *testing.T) {
 		{"stream_head_timeout: \"7\"", 7},
 		{"stream_head_timeout: 0", 0},
 		{"stream_head_timeout: -3", 0},
-		{"stream_head_timeout: notanumber", 0},
+		{"stream_head_timeout: notanumber", 30},
 	} {
 		configure(configYAMLEnvelope("enabled: true\n" + tc.yaml + "\n"))
 		if got := loadedStreamHeadTimeout(); got != tc.want {

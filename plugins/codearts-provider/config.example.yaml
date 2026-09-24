@@ -1,0 +1,264 @@
+# CodeArts Doer plugin configuration for CLIProxyAPI.
+#
+# Merge the `plugins:` block below into your CLIProxyAPI config.yaml. The plugin
+# ID is the dynamic library file name without its extension, so the library must
+# be named `codearts-provider.dll` / `codearts-provider.so` / `codearts-provider.dylib`.
+#
+# Placement (searched in priority order per platform):
+#   plugins/<GOOS>/<GOARCH>/codearts-provider.dll   <- most specific, used below
+#   plugins/<GOOS>/<GOARCH>-<variant>/codearts-provider.dll
+#   plugins/codearts-provider.dll
+#
+# CLIProxyAPI must be a CGO build ("1" is reported by the management API header
+# indicating dynamic-library plugin support).
+
+plugins:
+  # Global switch. File discovery and per-plugin config are ignored when this is
+  # false.
+  enabled: true
+  dir: "plugins"
+  configs:
+    codearts-provider:
+      # Per-plugin switch. Omitting it is treated as enabled.
+      enabled: true
+      # Start/register/routing order: higher priority runs first.
+      priority: 100
+
+      # ---------------------------------------------------------------------
+      # Upstream endpoint
+      # ---------------------------------------------------------------------
+
+      # CodeArts Doer regional API gateway. Both the native chat API and the
+      # OpenAI-compatible agent API are served from this host.
+      # Regions: cn-north-4 (Beijing), cn-east-3 (Shanghai), cn-south-1 (Guangzhou),
+      #          ap-southeast-1 (Singapore), ...
+      base_url: "https://snap-access.cn-north-4.myhuaweicloud.com"
+
+      # Upstream protocol.
+      #   agent  - OpenAI-compatible POST /api/v2/chat/completions
+      #   native - proprietary POST /v1/chat/chat with CodeArts SSE framing
+      #
+      # native is text-only: requests carrying tools, tool_choice, functions,
+      # function_call, tool-role messages or non-text content parts are rejected
+      # with HTTP 400 rather than silently dropped. Use agent for tool use,
+      # images and Claude Code.
+      api_mode: "agent"
+
+      # CodeArts web console used to start the browser sign-in flow.
+      web_login_base: "https://codearts.huaweicloud.com"
+
+      # Huawei STS OAuth endpoints. Public-cloud users should keep these values;
+      # overrides mainly exist for private clouds and integration tests.
+      oauth_token_url: "https://sts.cn-north-4.myhuaweicloud.com/v1/oauth2/tokens"
+      oauth_identity_url: "https://sts.cn-north-4.myhuaweicloud.com/v5/caller-identity"
+
+      # ---------------------------------------------------------------------
+      # Client identity sent upstream (these headers are part of the signature)
+      # ---------------------------------------------------------------------
+
+      plugin_name: "snap_vscode"
+      plugin_version: "26.9.101"
+      # Defaults to "Vscode_<plugin_version>" when omitted.
+      client_version: "Vscode_26.9.101"
+      language: "en-us"
+
+      # ---------------------------------------------------------------------
+      # Models
+      # ---------------------------------------------------------------------
+
+      # Upstream agent to talk to. Used by the native protocol only.
+      agent_id: "Pangu_Doer_in_CodeArts"
+
+      # Optional ID for requests without a model. Normally clients select an
+      # actual ID from /v1/models, so no default is needed.
+      default_model_id: ""
+
+      # Client-facing ID -> upstream model_id. Add an entry per model you want to
+      # expose under a friendlier alias.
+      model_map: {}
+
+      # Optional explicit static models or aliases. Empty by default so a
+      # failed discovery never fabricates a Pangu model. Use the panel's
+      # account-model view to see IDs, names, sources and discovery warnings.
+      models: []
+
+      # Discover account models, including bounded initial benefit discovery.
+      # Chat routing never queries the optional benefit gateway. Agent
+      # results are cached for 5 minutes; partial failures retry after 30s.
+      discover_models: true
+
+      # Also read the account-scoped /v1/model/builtin catalogue after Agent
+      # Center. Disable if this optional regional endpoint is slow; configured
+      # fallback models remain available.
+      discover_builtin_models: true
+
+      # Empty discovers real agent IDs from the account's paginated agent list.
+      # An explicit list overrides agent discovery; native mode uses agent_id.
+      model_agent_ids: []
+
+      # Optional second model catalog. The account's benefit-gateway-config
+      # flag must also be enabled. Empty disables this catalog. Chat still goes
+      # through base_url with maas_type: benefit, as in the official extension.
+      benefit_gateway_url: "https://opengw.developer.huaweicloud.com"
+
+      # Optional manual override; discovered benefit models are now persisted
+      # automatically per account under state_dir. Only add models that
+      # this account actually received from an explicit panel/API refresh. They
+      # are registered without querying the optional gateway and always route
+      # with maas_type: benefit. This list is plugin-wide: with multiple
+      # accounts, include only entitlements shared by every account.
+      benefit_models: []
+      # Example:
+      # benefit_models:
+      #   - id: "glm-5.3-flash"
+      #     display_name: "glm-5.3-flash"
+      #     context_length: 1048576
+      #     max_output_tokens: 131072
+
+      # ---------------------------------------------------------------------
+      # Transport / signing
+      # ---------------------------------------------------------------------
+
+      # Ask the upstream for SSE heartbeat comment frames.
+      heartbeat: true
+
+      # Manage an independent upstream session for each request: busy while
+      # generating, idle after completion/failure/cancellation. Keep enabled
+      # to release the account's concurrent-chat slots promptly.
+      chat_session_heartbeat: true
+      # Per-account concurrent chats across models/protocols. Free: 3; set 5
+      # for an entitled paid account in the dashboard. Per-account 0 inherits
+      # this default (1-64). Local limit only; does not increase entitlement.
+      chat_session_concurrency: 3
+
+      # Include `host` in regional API signatures. Defaults to false for
+      # compatibility with existing configurations; captured 26.9.101 requests
+      # sign it. Benefit catalog requests always sign host, regardless of this.
+      sign_host: false
+
+      # Set the is_confidential header (KIA / confidential-code mode).
+      is_confidential: false
+
+      request_timeout_seconds: 600
+      login_timeout_seconds: 300
+
+      # ---------------------------------------------------------------------
+      # OAuth PKCE browser authorization callback
+      # ---------------------------------------------------------------------
+      #
+      # The plugin opens a localhost listener and hands its URL to CodeArts,
+      # exactly like VS Code CodeArts Agent 26.9.101. After authorization it
+      # exchanges the one-time code with PKCE + DPoP and stores the refresh
+      # context in CPA.
+
+      # Keep these defaults for Docker or a remote server. The browser will end
+      # on an unreachable localhost URL; copy that full URL into the plugin
+      # panel. No public callback, reverse proxy, or Docker port is needed.
+      login_callback_bind: "127.0.0.1"
+      login_callback_port: 0
+      login_callback_base: ""
+
+      # Advanced local-LAN deployments may pin a port and advertise a directly
+      # reachable HTTP base, but do not expose this callback publicly.
+
+      # ---------------------------------------------------------------------
+      # Scheduled tasks
+      # ---------------------------------------------------------------------
+      #
+      # The CLIProxyAPI plugin ABI has no timer: the host never calls a plugin on
+      # a schedule, so the plugin runs its own cron. Expressions accept the
+      # standard 5-field form (minute first) or the 6-field form with seconds.
+      # Official daily USER_LOGIN CREDIT activity (ops delivery/claim/confirm).
+      # NOT the developer gateway's benefit token pool.
+      # Manual "领取每日活动积分" works even when this or the total switch is off.
+      # Uses Beijing dates, catches up after startup, and deduplicates on disk.
+      daily_claim:
+        enabled: false
+
+      # Database/object-store hosts may wipe their local auth spool on startup.
+      # Set an absolute, persistent directory OUTSIDE the spool on those hosts.
+      # Docker example with /data mounted: "/data/codearts-provider-state"
+      # Empty uses auth-dir/.codearts-provider-state (ordinary file-backed CPA).
+      state_dir: ""
+
+      # Initial benefit model discovery is bounded to five seconds. It inherits
+      # CPA's proxy; override only if needed (direct:// explicitly means direct).
+      discovery_proxy_url: ""
+
+      # Panel switches are persisted under auth-dir/.codearts-provider-state/
+      # and override the corresponding YAML flags. No credentials are stored
+      # there; keep this directory on persistent storage across container updates.
+      schedule:
+        enabled: true
+        # IANA zone the expressions are evaluated in. Empty means the host's
+        # local zone.
+        timezone: "Asia/Shanghai"
+
+        # When tasks is omitted the built-in defaults below are used. Set
+        # disable_defaults: true to run only your own tasks.
+        disable_defaults: false
+
+        tasks:
+          # Renew the temporary AK/SK hourly. The upstream credential lasts 24h
+          # and the official IDE extension renews every hour.
+          - id: "token-renew"
+            type: "token_renew"
+            cron: "17 * * * *"
+            enabled: true
+
+          # Keep the subscription/quota snapshot warm for the panel and the
+          # quota API, so a page load does not hit the upstream per account.
+          - id: "quota-refresh"
+            type: "quota_refresh"
+            cron: "*/30 * * * *"
+            enabled: true
+
+          # Legacy/custom activity only; not required for daily_claim above.
+          # Activity-specific benefit check-in (每日签到). Model discovery never
+          # claims an entitlement. Configure a verified claim request and its
+          # signing requirements here, or claim in the official client.
+          # Disabled until configured.
+          - id: "daily-checkin"
+            type: "checkin"
+            cron: "5 0 * * *"                          # 00:05 daily
+            checkin_method: "POST"
+            # Absolute, or a path resolved against base_url.
+            checkin_url: "/v1/activity/benefit/daily/claim"
+            checkin_body: '{"activityCode":"daily_sign_in"}'
+            checkin_headers: {}
+              # x-snap-traceid: "..."   # only if the page sends one
+            # Text that appears only on a real claim. With this set, a bare HTTP
+            # 200 that lacks the marker is reported as a failure rather than a
+            # silent success.
+            checkin_success_marker: ""
+            # Text meaning "already claimed today". Matching it counts as
+            # success, so a twice-a-day schedule does not look like a failure.
+            checkin_already_marker: ""
+            # The allowance is granted per Huawei Cloud account. Run the claim
+            # once per stored credential instead of the first one found.
+            checkin_all_accounts: false
+            # Claim for one account only, matched against the auth index, file
+            # name or label. Empty means "not restricted".
+            checkin_auth_index: ""
+            enabled: false
+
+          # Escape hatch: schedule any CodeArts gateway endpoint. `path` is
+          # resolved against base_url. Set sign: true to sign the request with
+          # the first available credential.
+          - id: "custom-instructions-warmup"
+            type: "http"
+            cron: "0 8 * * 1-5"     # weekdays at 08:00
+            method: "GET"
+            path: "/v1/chat/custom-instructions"
+            sign: true
+            enabled: false
+
+      # Extra headers added to every upstream request. They are included in the
+      # request signature, so keep the set stable.
+      extra_headers: {}
+        # x-snap-zone: "green"
+        # department: "your-department"
+
+      # Debugging only: send unsigned upstream requests when no credential is
+      # available. Never enable this in production.
+      insist_missing_credentials: false

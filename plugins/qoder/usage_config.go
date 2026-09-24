@@ -49,11 +49,11 @@ var (
 	managementAPIKeyMu sync.RWMutex
 
 	// streamHeadTimeoutSecs: config_yaml stream_head_timeout, integer seconds,
-	// default 0 = disabled. When > 0 the async streaming hand-off waits up to
+	// default 30; explicit 0 = disabled. When > 0 the async streaming hand-off waits up to
 	// that long for the first decisive upstream frame, so a failure that lands
 	// before the model starts answering can still be reported to the host as a
 	// plain failed request carrying a real HTTP status (see streamHeadGate).
-	streamHeadTimeoutSecs int
+	streamHeadTimeoutSecs = 30
 	streamHeadTimeoutMu   sync.RWMutex
 )
 
@@ -76,7 +76,7 @@ func configure(raw []byte) {
 	nextKeepaliveAuto := true
 	nextLoginRegion := regionCN // reset to default on reconfigure (like scheduler_mode)
 	nextMgmtKey := ""
-	nextStreamHeadTimeout := 0
+	nextStreamHeadTimeout := 30
 
 	cfgURL, cfgKey := "", ""
 	if len(raw) > 0 {
@@ -127,7 +127,7 @@ func configure(raw []byte) {
 				if strings.HasPrefix(line, "stream_head_timeout:") {
 					v := strings.TrimSpace(strings.TrimPrefix(line, "stream_head_timeout:"))
 					v = strings.TrimSpace(strings.Trim(v, "\"'"))
-					// A non-integer value leaves the default (0 = off): the gate
+					// A non-integer value leaves the default (30 seconds): the gate
 					// must never turn a typo in config.yaml into a stall.
 					if secs, errParse := strconv.Atoi(v); errParse == nil {
 						nextStreamHeadTimeout = secs

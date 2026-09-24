@@ -3,24 +3,22 @@
 # 用法: ./scripts/build.sh [linux|darwin|windows] [amd64|arm64]
 # 默认: 当前平台
 
-set -e
+set -euo pipefail
 
 TARGET_OS=${1:-$(go env GOOS)}
 TARGET_ARCH=${2:-$(go env GOARCH)}
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PLUGINS_DIR="$ROOT_DIR/plugins"
+VERSION=${VERSION:-$(tr -d '\r\n' < "$ROOT_DIR/VERSION")}
 
 echo "=== cpa-multi-plugins build ==="
 echo "Target: $TARGET_OS/$TARGET_ARCH"
 echo "Plugins dir: $PLUGINS_DIR"
 echo ""
 
-# 插件清单（v0.12.0 收敛为 3 个统一插件）
-PLUGINS=(
-  "workbuddy"
-  "qoder"
-  "trae"
-)
+# Read the same provider list used by the store and release packager.
+PLUGIN_IDS=$(python -c 'import json,sys; print(" ".join(p["id"] for p in json.load(open(sys.argv[1], encoding="utf-8"))["plugins"]))' "$ROOT_DIR/registry.json")
+read -r -a PLUGINS <<< "$PLUGIN_IDS"
 
 # 输出目录
 OUT_DIR="$ROOT_DIR/dist/$TARGET_OS-$TARGET_ARCH"
@@ -40,11 +38,12 @@ export GOOS=$TARGET_OS
 export GOARCH=$TARGET_ARCH
 
 # 跨平台编译需要对应 C 编译器
-CC="gcc"
 if [ "$TARGET_OS" = "darwin" ]; then
   CC="${CC:-clang}"
 elif [ "$TARGET_OS" = "windows" ]; then
   CC="${CC:-x86_64-w64-mingw32-gcc}"
+else
+  CC="${CC:-gcc}"
 fi
 export CC
 
@@ -56,7 +55,7 @@ for plugin in "${PLUGINS[@]}"; do
   echo "--- Building $plugin ---"
   cd "$PLUGINS_DIR/$plugin"
   OUT_FILE="$OUT_DIR/${plugin}.${EXT}"
-  if CGO_ENABLED=1 go build -buildmode=c-shared -trimpath -ldflags="-s -w" -o "$OUT_FILE" . 2>&1 | tail -5; then
+  if CGO_ENABLED=1 go build -buildmode=c-shared -trimpath -ldflags="-s -w -X main.version=$VERSION" -o "$OUT_FILE" . 2>&1 | tail -5; then
     if [ -f "$OUT_FILE" ]; then
       SIZE=$(du -h "$OUT_FILE" | cut -f1)
       echo "  ✅ $plugin → $OUT_FILE ($SIZE)"

@@ -1,0 +1,10 @@
+{
+  "total": 5,
+  "agents": [
+    {"agent_id": "a8bcb36232554267a5142361cc25a393", "original_id": "", "agent_name": "CodeAgent", "show_in_ide": true, "is_primary_agent": true, "status": 1},
+    {"agent_id": "9f0e5cb64a104dcfb4aa90dbedab7dc9", "original_id": "", "agent_name": "CodeArts Doer For Coding", "show_in_ide": true, "is_primary_agent": true, "status": 1},
+    {"agent_id": "ad3cba47bee142e980c6c293e857b07d", "original_id": "", "agent_name": "InLineChat", "show_in_ide": true, "is_primary_agent": true, "status": 1},
+    {"agent_id": "c497c5d68d5a4d8fb7d58ef84df5f685", "original_id": "", "agent_name": "PlanModeAgent", "show_in_ide": true, "is_primary_agent": true, "status": 1},
+    {"agent_id": "0a31170db80141e3b4119c2680f42af0", "original_id": "", "agent_name": "ActModeAgent", "show_in_ide": true, "is_primary_agent": true, "status": 1}
+  ]
+}

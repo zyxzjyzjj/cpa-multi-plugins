@@ -340,7 +340,7 @@ func wbRegistration() registration {
 			Name:             providerName,
 			Version:          version,
 			Author:           "mmqz",
-			GitHubRepository: "https://github.com/mmqz/cpa-multi-plugins",
+			GitHubRepository: "https://github.com/zyxzjyzjj/cpa-multi-plugins",
 			Logo:             pluginLogoURL,
 			ConfigFields: []pluginapi.ConfigField{
 				{Name: "login_provider", Type: pluginapi.ConfigFieldTypeEnum, EnumValues: []string{providerZai, providerBigmodel}, Description: "Upstream provider for NEW logins: zai (api.z.ai, default) or bigmodel (open.bigmodel.cn). Existing accounts keep their own provider."},
